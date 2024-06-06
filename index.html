@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wspólne oglądanie ekranu</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Wspólne oglądanie ekranu</h1>
+    <input id="roomId" type="text" placeholder="ID pokoju">
+    <button id="createRoom">Utwórz pokój</button>
+    <button id="joinRoom">Dołącz do pokoju</button>
+    <button id="shareScreen">Udostępnij ekran</button>
+    <video id="screenVideo" autoplay></video>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const roomIdInput = document.getElementById('roomId');
+        const createRoomButton = document.getElementById('createRoom');
+        const joinRoomButton = document.getElementById('joinRoom');
+        const shareScreenButton = document.getElementById('shareScreen');
+        const screenVideo = document.getElementById('screenVideo');
+
+        let currentRoom = null;
+
+        createRoomButton.onclick = () => {
+            const roomId = roomIdInput.value;
+            if (roomId) {
+                currentRoom = roomId;
+                socket.emit('createRoom', roomId);
+                alert(`Pokój ${roomId} został utworzony`);
+            }
+        };
+
+        joinRoomButton.onclick = () => {
+            const roomId = roomIdInput.value;
+            if (roomId) {
+                currentRoom = roomId;
+                socket.emit('joinRoom', roomId);
+                alert(`Dołączyłeś do pokoju ${roomId}`);
+            }
+        };
+
+        shareScreenButton.onclick = async () => {
+            if (!currentRoom) {
+                alert('Musisz najpierw utworzyć lub dołączyć do pokoju!');
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                screenVideo.srcObject = stream;
+
+                stream.getVideoTracks()[0].onended = () => {
+                    socket.emit('screenData', { roomId: currentRoom, data: null });
+                };
+
+                const videoTrack = stream.getVideoTracks()[0];
+                const imageCapture = new ImageCapture(videoTrack);
+
+                const captureScreen = async () => {
+                    try {
+                        const bitmap = await imageCapture.grabFrame();
+                        const canvas = document.createElement('canvas');
+                        canvas.width = bitmap.width;
+                        canvas.height = bitmap.height;
+                        const context = canvas.getContext('2d');
+                        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+                        const data = canvas.toDataURL('image/webp');
+                        socket.emit('screenData', { roomId: currentRoom, data });
+                    } catch (error) {
+                        console.error('Błąd przy przechwytywaniu ekranu:', error);
+                    }
+                };
+
+                setInterval(captureScreen, 100);
+            } catch (error) {
+                console.error('Błąd przy udostępnianiu ekranu:', error);
+            }
+        };
+
+        socket.on('screenData', data => {
+            if (data) {
+                const img = new Image();
+                img.src = data;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const context = canvas.getContext('2d');
+                    context.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    screenVideo.srcObject = canvas.captureStream();
+                };
+            } else {
+                screenVideo.srcObject = null;
+            }
+        });
+    </script>
+</body>
+</html>

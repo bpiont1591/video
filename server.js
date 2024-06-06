@@ -1,33 +1,42 @@
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
+const socketIO = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIO(server);
 
-app.use(express.static('public'));
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
-io.on('connection', (socket) => {
-    console.log('New connection:', socket.id);
+app.get('/style.css', (req, res) => {
+    res.sendFile(path.join(__dirname, 'style.css'));
+});
 
-    socket.on('joinRoom', (roomId) => {
+io.on('connection', socket => {
+    console.log('Nowe połączenie:', socket.id);
+
+    socket.on('createRoom', roomId => {
         socket.join(roomId);
-        console.log(`${socket.id} joined room ${roomId}`);
+        console.log(`Pokój ${roomId} utworzony przez ${socket.id}`);
     });
 
-    socket.on('offer', (data) => {
-        socket.to(data.room).emit('offer', data.offer);
+    socket.on('joinRoom', roomId => {
+        socket.join(roomId);
+        console.log(`Użytkownik ${socket.id} dołączył do pokoju ${roomId}`);
     });
 
-    socket.on('answer', (data) => {
-        socket.to(data.room).emit('answer', data.answer);
+    socket.on('screenData', ({ roomId, data }) => {
+        socket.to(roomId).emit('screenData', data);
     });
 
-    socket.on('candidate', (data) => {
-        socket.to(data.room).emit('candidate', data.candidate);
+    socket.on('disconnect', () => {
+        console.log('Rozłączono:', socket.id);
     });
 });
 
-const PORT = 4000;  // Here you set the new port
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(3000, () => {
+    console.log('Serwer działa na porcie 3000');
+});
